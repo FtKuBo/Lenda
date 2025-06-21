@@ -38,18 +38,21 @@ def analyze_brainwaves(request):
         # Store the analysis result
         analysis_result = AnalysisResult.objects.create(
             brainwave_data=brainwave_data,
-            correspondence_score=result['correspondence_score'],
-            confidence=result['confidence'],
-            prediction=result['corresponds'],
+            correspondence_score=result['global_correspondence_score'],
+            confidence=result['global_confidence'],
+            prediction=result['global_corresponds'],
             features=result['features']
         )
         
         return JsonResponse({
             'id': analysis_result.id,
-            'correspondence_score': result['correspondence_score'],
-            'corresponds': result['corresponds'],
-            'confidence': result['confidence'],
+            'correspondence_score': result['global_correspondence_score'],
+            'corresponds': result['global_corresponds'],
+            'confidence': result['global_confidence'],
             'features': result['features'],
+            'pod_correspondence_scores': result['pod_correspondence_scores'],
+            'pod_corresponds': result['pod_corresponds'],
+            'pod_confidences': result['pod_confidences'],
             'timestamp': analysis_result.timestamp.isoformat()
         })
         
@@ -83,7 +86,7 @@ def train_model(request):
         # Store training metrics
         ModelMetrics.objects.create(
             model_version='v1.0',
-            accuracy=training_result['accuracy'],
+            accuracy=training_result['global_accuracy'],
             loss=training_result['loss'],
             training_samples=1,
             validation_samples=0,
@@ -92,8 +95,10 @@ def train_model(request):
         
         return JsonResponse({
             'loss': training_result['loss'],
-            'accuracy': training_result['accuracy'],
-            'prediction': training_result['prediction'],
+            'accuracy': training_result['global_accuracy'],
+            'prediction': training_result['global_prediction'],
+            'pod_accuracies': training_result['pod_accuracies'],
+            'pod_predictions': training_result['pod_predictions'],
             'samples_seen': training_result['samples_seen']
         })
         
@@ -208,7 +213,7 @@ def batch_train(request):
         # Store training metrics
         ModelMetrics.objects.create(
             model_version='v1.0',
-            accuracy=training_result['accuracy'],
+            accuracy=training_result['global_accuracy'],
             loss=training_result['loss'],
             training_samples=len(batch),
             validation_samples=0,
@@ -217,7 +222,8 @@ def batch_train(request):
         
         return JsonResponse({
             'loss': training_result['loss'],
-            'accuracy': training_result['accuracy'],
+            'accuracy': training_result['global_accuracy'],
+            'pod_accuracies': training_result['pod_accuracies'],
             'samples_trained': len(batch),
             'total_samples_seen': training_result['samples_seen'],
             'training_time': training_time
@@ -246,31 +252,45 @@ def generate_sample_data(request):
     """Generate sample brainwave data for testing"""
     try:
         # Generate sample brainwave data
-        sample_rate = 256
+        sample_rate = 250
+        features = 8
         duration = 1  # 1 second
+
         t = np.linspace(0, duration, sample_rate)
         
-        # Generate two similar waves (should correspond)
-        wave1 = np.sin(2 * np.pi * 10 * t) + 0.1 * np.random.randn(len(t))
-        wave2 = np.sin(2 * np.pi * 10 * t + 0.1) + 0.1 * np.random.randn(len(t))
-        
-        # Generate two different waves (should not correspond)
-        wave3 = np.sin(2 * np.pi * 5 * t) + 0.1 * np.random.randn(len(t))
-        wave4 = np.cos(2 * np.pi * 20 * t) + 0.1 * np.random.randn(len(t))
+        wave1 = np.array([
+            np.sin(2 * np.pi * 10 * t + phase) + 0.1 * np.random.randn(sample_rate)
+            for phase in np.linspace(0, 0.7, features)
+        ]).T 
+
+        wave2 = np.array([
+            np.sin(2 * np.pi * 10 * t + phase + 0.1) + 0.1 * np.random.randn(sample_rate)
+            for phase in np.linspace(0, 0.7, features)
+        ]).T
+
+        wave3 = np.array([
+            np.sin(2 * np.pi * 5 * t + phase) + 0.1 * np.random.randn(sample_rate)
+            for phase in np.linspace(0, 0.7, features)
+        ]).T 
+
+        wave4 = np.array([
+            np.sin(2 * np.pi * 20 * t + phase + 0.1) + 0.1 * np.random.randn(sample_rate)
+            for phase in np.linspace(0, 0.7, features)
+        ]).T  
         
         return JsonResponse({
-            'corresponding_waves': {
+            # 'corresponding_waves': {
                 'wave1': wave1.tolist(),
                 'wave2': wave2.tolist(),
                 'label': True
-            },
-            'non_corresponding_waves': {
-                'wave1': wave3.tolist(),
-                'wave2': wave4.tolist(),
-                'label': False
-            },
-            'sample_rate': sample_rate,
-            'duration': duration
+            # },
+            # 'non_corresponding_waves': {
+            #     'wave1': wave3.tolist(),
+            #     'wave2': wave4.tolist(),
+            #     'label': False
+            # },
+            # 'sample_rate': sample_rate,
+            # 'duration': duration
         })
         
     except Exception as e:
